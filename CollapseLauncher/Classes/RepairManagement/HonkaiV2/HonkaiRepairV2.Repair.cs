@@ -63,17 +63,17 @@ internal partial class HonkaiRepairV2
 
         return;
 
-        ValueTask Impl(FilePropertiesRemote asset, CancellationToken token)
+        async ValueTask Impl(FilePropertiesRemote asset, CancellationToken token)
         {
             try
             {
-                return asset switch
+                await (asset switch
                 {
-                    { AssociatedObject: SophonAsset } => RepairAssetGenericSophonType(asset, token),
-                    { FT: FileType.Audio } => RepairAssetAudioType(asset, token),
-                    { FT: FileType.Block } => RepairAssetBlockType(asset, token),
-                    _ => RepairAssetGenericType(GetHttpClientFromFilename(asset), asset, token)
-                };
+                    { AssociatedObject: SophonAsset } => RepairAssetGenericSophonType(asset, token).ConfigureAwait(false),
+                    { FT: FileType.Audio } => RepairAssetAudioType(asset, token).ConfigureAwait(false),
+                    { FT: FileType.Block } => RepairAssetBlockType(asset, token).ConfigureAwait(false),
+                    _ => RepairAssetGenericType(GetHttpClientFromFilename(asset), asset, token).ConfigureAwait(false)
+                });
             }
             catch (HttpRequestException httpEx)
             {
@@ -85,6 +85,8 @@ internal partial class HonkaiRepairV2
                     Asset Hash: {asset.CRC}
                     Type: {asset.FT}
                     Object Association: {(asset.AssociatedObject is var obj ? obj.GetType().Name : "GenericDownload")}
+                    HTTP Status code: {httpEx.StatusCode} ({(int)(httpEx.StatusCode ?? default)})
+                    HTTP Error category: {httpEx.HttpRequestError}
                     """;
                 throw new HttpRequestException(httpEx.HttpRequestError, message, httpEx, httpEx.StatusCode);
             }
