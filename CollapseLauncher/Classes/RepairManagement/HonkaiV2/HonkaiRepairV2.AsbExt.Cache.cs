@@ -6,6 +6,7 @@ using CollapseLauncher.Interfaces;
 using Hi3Helper;
 using Hi3Helper.Data;
 using Hi3Helper.EncTool;
+using Hi3Helper.EncTool.Enc;
 using Hi3Helper.EncTool.Parser.AssetMetadata;
 using Hi3Helper.EncTool.Parser.KianaDispatch;
 using Hi3Helper.Plugin.Core.Management;
@@ -141,7 +142,7 @@ internal static partial class AssetBundleExtension
         TextAsset packageVersionText  = new(packageVersionBytes);
 
         int    mersenneTwisterSeed = 0;
-        byte[] hmacHashSalt        = [];
+        byte[] hmacHashSalt        = new byte[8];
 
         // Enumerate each of JSON object entry
         foreach (ReadOnlySpan<char> currentJsonEntry in packageVersionText.GetStringEnumeration())
@@ -194,8 +195,14 @@ internal static partial class AssetBundleExtension
                     }
 
                     // Use Collapse's MhyEncTool to get the salt from the last 8 bytes of the signature bytes.
-                    MhyEncTool saltTool = new(currentJsonEntry.ToString(), masterKey);
-                    hmacHashSalt = saltTool.GetSalt();
+                    if (!MhyEncTool.TryGetSalt(currentJsonEntry,
+                                               masterKey,
+                                               hmacHashSalt,
+                                               out _,
+                                               out Exception? ex))
+                    {
+                        throw ex;
+                    }
 #if DEBUG
                     Logger.LogWriteLine($"[AssetBundleExtension::DeserializeCacheAssetListAsync] Got HMACSHA1 salt: 0x{BinaryPrimitives.ReadInt64LittleEndian(hmacHashSalt):x8}",
                                         LogType.Debug,

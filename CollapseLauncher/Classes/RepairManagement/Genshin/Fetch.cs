@@ -4,7 +4,7 @@ using CollapseLauncher.Helper.Metadata;
 using CollapseLauncher.Helper.StreamUtility;
 using CollapseLauncher.InstallManager.Genshin;
 using Hi3Helper;
-using Hi3Helper.EncTool;
+using Hi3Helper.EncTool.Enc;
 using Hi3Helper.EncTool.Hashes;
 using Hi3Helper.EncTool.Parser.AssetIndex;
 using Hi3Helper.EncTool.Parser.YSDispatchHelper;
@@ -305,7 +305,7 @@ namespace CollapseLauncher
                 // DEBUG ONLY: Show encrypted Proto as JSON+Base64 format
                 string dFormat = $"Query Response (RAW Encrypted form):\r\n{dispatchInfo?.Content}";
 #if DEBUG
-                LogWriteLine(dFormat);
+                LogWriteLine(dFormat, LogType.Debug, true);
 #endif
                 // Write the decrypted query response in the log (for diagnostic)
                 await LogFileWriter.WriteLineAsync(dFormat);
@@ -323,7 +323,7 @@ namespace CollapseLauncher
             // DEBUG ONLY: Show the decrypted Proto as Base64 format
             string dFormat = $"Proto Response (RAW Decrypted form):\r\n{Convert.ToBase64String(decryptedData)}";
 #if DEBUG
-            LogWriteLine(dFormat);
+            LogWriteLine(dFormat, LogType.Debug, true);
 #endif
             await LogFileWriter.WriteLineAsync(dFormat);
 
