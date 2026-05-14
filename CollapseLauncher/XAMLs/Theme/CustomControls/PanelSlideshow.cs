@@ -10,12 +10,4 @@ public partial class PanelSlideshow : Control
     {
         DefaultStyleKey = typeof(PanelSlideshow);
     }
-
-    ~PanelSlideshow()
-    {
-        if (this.IsObjectDisposed()) return;
-
-        Loaded   -= PanelSlideshow_Loaded;
-        Unloaded -= PanelSlideshow_Unloaded;
-    }
 }

@@ -14,15 +14,4 @@ public partial class LayeredBackgroundImage : Control
 
         DefaultStyleKey = typeof(LayeredBackgroundImage);
     }
-
-    ~LayeredBackgroundImage()
-    {
-        if (!this.IsObjectDisposed())
-        {
-            Loaded   -= LayeredBackgroundImage_OnLoaded;
-            Unloaded -= LayeredBackgroundImage_OnUnloaded;
-        }
-
-        DisposeVideoPlayer();
-    }
 }
