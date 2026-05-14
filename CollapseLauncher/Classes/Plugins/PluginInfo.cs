@@ -35,6 +35,7 @@ public partial class PluginInfo : INotifyPropertyChanged, IDisposable
     internal const string MarkPendingUpdateApplyFileName = "_markPendingUpdateApply";
 
     private bool _isDisposed;
+    private nint _instancePluginPpv;
 
     public event PropertyChangedEventHandler? PropertyChanged = delegate { };
 
@@ -154,16 +155,17 @@ public partial class PluginInfo : INotifyPropertyChanged, IDisposable
             // TODO: Add versioning check.
             GameVersion pluginStandardVersion = ((delegate* unmanaged[Cdecl]<ref GameVersion>)getPluginStandardVersionHandleP)();
             GameVersion pluginVersion = ((delegate* unmanaged[Cdecl]<ref GameVersion>)getPluginVersionHandleP)();
-            nint pluginInstancePtr = ((delegate* unmanaged[Cdecl]<nint>)getPluginHandleP)();
+            _instancePluginPpv = ((delegate* unmanaged[Cdecl]<nint>)getPluginHandleP)();
 
-            if (pluginInstancePtr == nint.Zero)
+            if (_instancePluginPpv == nint.Zero)
             {
                 throw new NullReferenceException($"Plugin's \"GetPlugin\" ({pluginRelName}) export function returns a null pointer!");
             }
 
-            if (!ComMarshal<IPlugin>.TryCreateComObjectFromReference(pluginInstancePtr,
+            if (!ComMarshal<IPlugin>.TryCreateComObjectFromReference(_instancePluginPpv,
                                                                      out IPlugin? pluginInstance,
-                                                                     out Exception? ex))
+                                                                     out Exception? ex,
+                                                                     isKeepAliveSource: true))
             {
                 throw ex;
             }
@@ -245,10 +247,14 @@ public partial class PluginInfo : INotifyPropertyChanged, IDisposable
         }
         catch
         {
-            if (pluginHandle != nint.Zero && !isPluginLoaded)
+            if (pluginHandle == nint.Zero || isPluginLoaded) throw;
+            
+            if (Interlocked.Exchange(ref _instancePluginPpv, nint.Zero) is var ppv &&
+                ppv != nint.Zero)
             {
-                NativeLibrary.Free(pluginHandle);
+                Marshal.Release(ppv);
             }
+            NativeLibrary.Free(pluginHandle);
 
             throw;
         }
@@ -446,6 +452,11 @@ public partial class PluginInfo : INotifyPropertyChanged, IDisposable
             // Free GCHandle and nullify the delegate.
             _sharedLoggerCallbackGcHandle.Free();
             Interlocked.Exchange(ref _sharedLoggerCallback, null);
+
+            if (_instancePluginPpv != nint.Zero)
+            {
+                Marshal.Release(Interlocked.Exchange(ref _instancePluginPpv, nint.Zero));
+            }
         }
 
         GC.SuppressFinalize(this);
