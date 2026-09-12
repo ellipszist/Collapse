@@ -58,6 +58,7 @@ internal static unsafe class Sleepy
         return ReadString(stream, magic);
     }
 
+    [SkipLocalsInit]
     internal static string ReadString(Stream stream, ReadOnlySpan<byte> magic)
     {
         // Stream assertion
@@ -123,6 +124,7 @@ internal static unsafe class Sleepy
         WriteString(stream, content, magic);
     }
 
+    [SkipLocalsInit]
     internal static void WriteString(Stream stream, ReadOnlySpan<char> content, ReadOnlySpan<byte> magic)
     {
         // Stream assertion
@@ -156,9 +158,9 @@ internal static unsafe class Sleepy
 
             // Do the do (pt. 2)
             int h = InternalWrite(magic,
-                                  unevilBuffer.AsSpan(0, unevilBufferLen),
                                   evil,
-                                  evilBuffer);
+                                  evilBuffer,
+                                  unevilBuffer.AsSpan(0, unevilBufferLen));
 
             writer.Write7BitEncodedInt(h);
             writer.BaseStream.Write(evilBuffer, 0, h);
@@ -209,9 +211,9 @@ internal static unsafe class Sleepy
 
     private static int InternalWrite(
         ReadOnlySpan<byte>        magic,
-        ReadOnlySpan<byte>        unevilBuffer,
         scoped ReadOnlySpan<bool> evil,
-        Span<byte>                evilBuffer)
+        Span<byte>                evilBuffer,
+        ReadOnlySpan<byte>        unevilBuffer)
     {
         int h = 0;
         int i = 0;
@@ -257,7 +259,7 @@ internal static unsafe class Sleepy
         private void EmulateReadAssert()
         {
             // Check if the record type is a SerializedStreamHeader
-            reader.ReadAssertEnum(BinaryHeaderEnum.SerializedStreamHeader);
+            reader.ReadAssert(BinaryHeaderEnum.SerializedStreamHeader);
 
             // Check if Root object ID == 1
             reader.ReadAssert(1);
@@ -272,31 +274,14 @@ internal static unsafe class Sleepy
             reader.ReadAssert(0);
 
             // Check if the record type is an ObjectString
-            reader.ReadAssertEnum(BinaryHeaderEnum.ObjectString);
+            reader.ReadAssert(BinaryHeaderEnum.ObjectString);
 
             // Check if Root object ID == 1
             reader.ReadAssert(1);
         }
 
         private void EmulateReadAssertMessageEnd() =>
-            reader.ReadAssertEnum(BinaryHeaderEnum.MessageEnd);
-
-        [SkipLocalsInit]
-        private void ReadAssertEnum<T>(T assertWith)
-            where T : unmanaged, Enum
-        {
-            Span<byte> buffer = stackalloc byte[sizeof(T)];
-            _ = reader.BaseStream.Read(buffer);
-
-            ref T thisEnum = ref MemoryMarshal.AsRef<T>(buffer);
-            if (IsEqual(ref thisEnum, ref assertWith))
-                return;
-
-            string? assertHeaderEnumValueName   = Enum.GetName(assertWith);
-            string? comparedHeaderEnumValueName = Enum.GetName(thisEnum);
-
-            throw new InvalidDataException($"[Sleepy::LogAssertInfo] BinaryFormatter header is not valid at stream pos: {reader.BaseStream.Position - sizeof(T):x8}. Expecting object enum: {assertHeaderEnumValueName} but getting: {comparedHeaderEnumValueName} instead!");
-        }
+            reader.ReadAssert(BinaryHeaderEnum.MessageEnd);
 
         [SkipLocalsInit]
         private void ReadAssert<T>(T assertWith)
@@ -344,10 +329,11 @@ internal static unsafe class Sleepy
         where T : unmanaged
         => sizeof(T) switch
         {
-            1 => Unsafe.As<T, byte>(ref from) == Unsafe.As<T, byte>(ref to),
-            2 => Unsafe.As<T, short>(ref from) == Unsafe.As<T, short>(ref to),
-            4 => Unsafe.As<T, int>(ref from) == Unsafe.As<T, int>(ref to),
-            8 => Unsafe.As<T, long>(ref from) == Unsafe.As<T, long>(ref to),
-            _ => MemoryMarshal.AsBytes(new Span<T>(ref from)).SequenceEqual(MemoryMarshal.AsBytes(new Span<T>(ref to)))
+            1  => Unsafe.As<T, byte>(ref from) == Unsafe.As<T, byte>(ref to),
+            2  => Unsafe.As<T, short>(ref from) == Unsafe.As<T, short>(ref to),
+            4  => Unsafe.As<T, int>(ref from) == Unsafe.As<T, int>(ref to),
+            8  => Unsafe.As<T, long>(ref from) == Unsafe.As<T, long>(ref to),
+            16 => Unsafe.As<T, Int128>(ref from) == Unsafe.As<T, Int128>(ref to),
+            _  => MemoryMarshal.AsBytes(new Span<T>(ref from)).SequenceEqual(MemoryMarshal.AsBytes(new Span<T>(ref to)))
         };
 }
