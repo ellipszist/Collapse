@@ -678,7 +678,7 @@ namespace CollapseLauncher.InstallManager.Base
             ProgressPerFileSizeCurrent = 0;
 
             byte[] hashLocal;
-            await using (Stream fs = asset.GetReadStream(DownloadThreadCount)!)
+            await using (Stream fs = asset.GetReadStream())
             {
                 // Reset the per file size
                 ProgressPerFileSizeTotal = fs.Length;
@@ -742,6 +742,9 @@ namespace CollapseLauncher.InstallManager.Base
 
             // If the gamePackage arg is null, then assign one from _assetIndex
             gamePackage ??= AssetIndex;
+            
+            // Dedup chunked files.
+            gamePackage = MergeChunkedPackage(gamePackage);
 
             // Get the sum of uncompressed size and
             // Set progress count to beginning
@@ -1002,16 +1005,9 @@ namespace CollapseLauncher.InstallManager.Base
             await GetPackagesRemoteSize(AssetIndex, token);
             long totalPackageSize = AssetIndex.Sum(x => x.Size);
 
-            // Get the sum of the total size of the single or segmented packages
-            return AssetIndex.Sum(asset => asset.IsReadStreamExist(DownloadThreadCount) ?
-                                      // If yes, then return the size of the single stream
-                                      asset.GetStreamLength(DownloadThreadCount) :
-                                      // If neither of both exist, then return 0
-                                      0) == totalPackageSize; // Then compare if the total package size is equal
-
-            // Note:
-            // x.GetReadStream() will check if the single package/zip exist.
-            // So checking the fully downloaded single package is unnecessary.
+            // Get the sum of the total size of the single or segmented packages.
+            // Then compare if the total package size is equal.
+            return AssetIndex.Sum(asset => asset.GetStreamLength()) == totalPackageSize;
         }
 
         public async ValueTask<bool> MoveGameLocation()
@@ -2983,9 +2979,9 @@ namespace CollapseLauncher.InstallManager.Base
 
             // If the file exist or package size is unmatched,
             // then start downloading
-            long legacyExistingPackageFileSize  = package.GetStreamLength(DownloadThreadCount);
+            long legacyExistingPackageFileSize  = package.GetStreamLength();
             long existingPackageFileSize        = package.SizeDownloaded > legacyExistingPackageFileSize ? package.SizeDownloaded : legacyExistingPackageFileSize;
-            bool isExistingPackageFileExist     = package.IsReadStreamExist(DownloadThreadCount);
+            bool isExistingPackageFileExist     = package.IsReadStreamExist();
 
             if (!isExistingPackageFileExist
                 || existingPackageFileSize != package.Size)
@@ -3284,6 +3280,61 @@ namespace CollapseLauncher.InstallManager.Base
 
             throw new
                 NotSupportedException($"Cannot uninstall game: {GameVersionManager.GamePreset.GameType}. Uninstall method is not yet implemented!");
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        private static List<GameInstallPackage> MergeChunkedPackage(List<GameInstallPackage> packages)
+        {
+            List<GameInstallPackage> dedupList = [];
+
+            // Clone the list first.
+            foreach (GameInstallPackage package in packages)
+            {
+                string filePath = package.PathOutput;
+                string fileExtension = Path.GetExtension(filePath);
+
+                // Add the first chunk
+                if (fileExtension.StartsWith(".001"))
+                {
+                    dedupList.Add(package.Clone());
+                    continue;
+                }
+
+                // Ignore other chunks
+                if (fileExtension.IsChunkedFilePath())
+                {
+                    continue;
+                }
+
+                // Add other non-chunk file
+                dedupList.Add(package.Clone());
+            }
+
+            // Start adding up the chunk files.
+            foreach (GameInstallPackage dedupPackage in dedupList)
+            {
+                string filePath           = dedupPackage.PathOutput;
+                string filePathNoChunkExt = Path.Combine(Path.GetDirectoryName(filePath) ?? "", Path.GetFileNameWithoutExtension(filePath));
+                string fileExtension      = Path.GetExtension(filePath);
+
+                if (!fileExtension.StartsWith(".001"))
+                {
+                    continue;
+                }
+
+                // Select the chunked file by order only
+                foreach (GameInstallPackage package in packages
+                                                      .Where(x => x.PathOutput.StartsWith(filePathNoChunkExt))
+                                                      .OrderBy(x => x.PathOutput))
+                {
+                    dedupPackage.ChunkList.Add(package.Clone());
+                }
+            }
+
+            return dedupList;
         }
 
         #endregion
